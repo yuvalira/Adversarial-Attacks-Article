@@ -14,6 +14,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 dataset_name = "adult_income"
 
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+
 
 parameters_module_path = f"{dataset_name}.parameters"
 parameters_module = importlib.import_module(parameters_module_path)
@@ -24,15 +27,15 @@ categorical_features = parameters_module.categorical_features
 all_features         = numerical_features + categorical_features
 
 # Read GBT model (sklearn)
-model = 'sklearn_GBT_model.joblib'
-model_path = dataset_name + '/' + model
+model_path = os.path.join(project_root, dataset_name, 'sklearn_GBT_model.joblib')
+print(model_path)
 assert os.path.exists(model_path), f"Model file not found at {model_path}"
 model_gbt = joblib.load(model_path)
 print("sklearn GBT model loaded successfully.")
 
 # Load label encoders for decoding categorical features
 encoders = 'label_encoders.pkl'
-encoders_path = dataset_name + '/' + encoders
+encoders_path = os.path.join(project_root, dataset_name, encoders)
 with open(encoders_path, 'rb') as f:
     encoders = pickle.load(f)
 print("Label encoders loaded successfully.")

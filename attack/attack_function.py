@@ -9,6 +9,8 @@ def generate_adversarial_dataset(
     sigmas,
     numerical_features,
     categorical_features,
+    label_col,
+    positive_value,
     num_perturb_iterations,
     num_minimize_iterations,
     batch_size: int = 32,
@@ -35,9 +37,9 @@ def generate_adversarial_dataset(
         batch_sizes.append(len(batch))
 
         # Get true labels and prepare input features
-        true_labels = true_batch['income'].apply(lambda x: 1 if x.strip() == '>50K' else 0).to_numpy()
-        batch.drop(columns=['income'], inplace=True)
-        batch.drop(columns=['income_binary'], inplace=True)
+        true_labels = true_batch[label_col].apply(lambda x: 1 if x.strip() == positive_value else 0).to_numpy()
+        batch.drop(columns=[label_col], inplace=True)
+        batch.drop(columns=['target_binary'], inplace=True)
 
         # Get initial predictions
         current_labels, original_scores = predict_LM(batch) if modelArch == "LM" else predict_GBT(batch)

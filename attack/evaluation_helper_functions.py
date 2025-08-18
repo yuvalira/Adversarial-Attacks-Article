@@ -1,4 +1,5 @@
 import numpy as np
+import os
 # Evaluation metrics
 from sklearn.metrics import (
     accuracy_score,
@@ -154,7 +155,7 @@ def compare_attack_results(original_df, adversarial_df, y_column='income'):
     acc_drop = original_accuracy - attacked_accuracy
     print(f"\n Accuracy Drop due to Attack: {acc_drop:.4f} ({acc_drop * 100:.2f}% decrease)")
 
-def plot_roc_comparison(df_attacked, label_col='original_label', original_score_col='original_score', attacked_score_col='attacked_score'):
+def plot_roc_comparison(figures_path, df_attacked, label_col='original_label', original_score_col='original_score', attacked_score_col='attacked_score'):
     # Extract true labels
     y_true = df_attacked[label_col]
 
@@ -179,7 +180,9 @@ def plot_roc_comparison(df_attacked, label_col='original_label', original_score_
     plt.title("ROC Curve: Original vs Attacked")
     plt.legend(loc="lower right")
     plt.grid(True)
-    plt.show()
+
+    file_path = os.path.join(figures_path, 'ROC_plot')
+    plt.savefig(file_path)
 
 def plot_pca_projection(df_original,df_attacked,encoders,title_prefix=''):
     class_map={0: '<= 50k', 1: '> 50k'}
