@@ -9,6 +9,7 @@ import kagglehub
 
 # --- ML / Splits ---
 from sklearn.model_selection import train_test_split
+from sklearn.feature_selection import mutual_info_classif
 
 # --- Stats ---
 from scipy.stats import median_abs_deviation, pearsonr, entropy, pointbiserialr
@@ -24,6 +25,7 @@ from huggingface_hub import HfApi, upload_file
 def download_kaggle_dataset(kaggle_id: str) -> str:
     """Download a Kaggle dataset via kagglehub and return the local path."""
     return kagglehub.dataset_download(kaggle_id)
+
 
 def load_first_csv_in(path: str) -> pd.DataFrame:
     """Find and load the first CSV file in a directory."""
@@ -92,6 +94,20 @@ def undersample_to_balance(df: pd.DataFrame, label_col: str, seed: int = 42) -> 
     df_maj = df[df[label_col] == majority_class].sample(n=n_min, random_state=seed)
 
     df_balanced = pd.concat([df_min, df_maj]).sample(frac=1, random_state=seed).reset_index(drop=True)
+    return df_balanced
+
+def undersample_to_balance_multiclass(df: pd.DataFrame, label_col: str, seed: int = 42) -> pd.DataFrame:
+    """
+    Undersample each class to match the size of the smallest class.
+    Works for binary and multi-class datasets.
+    """
+    np.random.seed(seed)
+    counts = df[label_col].value_counts()
+    n_min = counts.min()
+    dfs = []
+    for cls in counts.index:
+        dfs.append(df[df[label_col] == cls].sample(n=n_min, random_state=seed))
+    df_balanced = pd.concat(dfs).sample(frac=1, random_state=seed).reset_index(drop=True)
     return df_balanced
 
 def stratified_splits(
@@ -204,6 +220,17 @@ def valuewise_correlation_dict_on_test(
     return corr_dict
 
 
+def feature_mutual_info(df: pd.DataFrame, label_col: str, categorical_features: list, numerical_features: list):
+    """
+    Compute mutual information between each feature and the (multi-class) label.
+    Returns: dict {feature: score}
+    """
+    X = pd.get_dummies(df[categorical_features + numerical_features], drop_first=False)
+    y = df[label_col]
+    mi = mutual_info_classif(X, y, discrete_features='auto', random_state=42)
+    return dict(zip(X.columns, mi))
+
+
 # =========================
 # Sigma selection
 # =========================
@@ -302,5 +329,54 @@ def compute_sigmas(
         sigmas.pop(label_col)
     return sigmas
 
+
+def compute_sigmas_multiclass(
+    df: pd.DataFrame,
+    label_col: str,
+    numerical_features: list,
+    categorical_features: list,
+    numeric_scale: float = 0.2,
+    min_numeric_sigma: float = 1e-3,
+    p0: float = 0.3,
+    min_flip: float = 0.01,
+):
+    """
+    Multi-class version of compute_sigmas.
+    Uses feature spread (numeric) and mutual information (categorical/numeric) instead of correlation.
+    """
+    from sklearn.feature_selection import mutual_info_classif
+
+    sigmas = {}
+
+    # mutual info for all features
+    X = pd.get_dummies(df[categorical_features + numerical_features], drop_first=False)
+    y = df[label_col]
+    mi = mutual_info_classif(X, y, discrete_features='auto', random_state=42)
+    mi_scores = dict(zip(X.columns, mi))
+
+    # ---- Numerical ----
+    for col in numerical_features:
+        x = pd.to_numeric(df[col], errors="coerce").dropna()
+        if len(x) < 3 or x.nunique() <= 1:
+            sigmas[col] = min_numeric_sigma
+            continue
+        robust_spread = float(median_abs_deviation(x, scale="normal", nan_policy="omit"))
+        if robust_spread == 0:
+            robust_spread = float(x.std() or 1.0)
+
+        shrink = 1 - min(1.0, mi_scores.get(col, 0))  # more MI → less noise
+        sigmas[col] = max(min_numeric_sigma, numeric_scale * robust_spread * shrink)
+
+    # ---- Categorical ----
+    for col in categorical_features:
+        p = df[col].value_counts(normalize=True)
+        ent = float(entropy(p, base=2))
+        ent_norm = ent / np.log2(len(p)) if len(p) > 1 else 0.0
+
+        shrink = 1 - min(1.0, mi_scores.get(col, 0))
+        flip_prob = p0 * shrink * (0.8 + 0.4 * ent_norm)
+        sigmas[col] = float(np.clip(flip_prob, min_flip, 0.9))
+
+    return sigmas
 
 
