@@ -1,10 +1,10 @@
 from attack_helper_functions import *
-from prediction_functions import *
+from adult_income.prediction_functions.GBT import *
 import pandas as pd
 
 def generate_adversarial_dataset(
     df,
-    modelArch,  # "LM" for predict_LM, "GBT" for predict_GBT
+    predict_function,
     correlation_dict,
     sigmas,
     numerical_features,
@@ -42,7 +42,7 @@ def generate_adversarial_dataset(
         batch.drop(columns=['target_binary'], inplace=True)
 
         # Get initial predictions
-        current_labels, original_scores = predict_LM(batch) if modelArch == "LM" else predict_GBT(batch)
+        current_labels, original_scores = predict_function(batch)
         original_predictions = current_labels.copy()
         original_incorrect_predictions = (original_predictions != true_labels)
 
@@ -67,7 +67,7 @@ def generate_adversarial_dataset(
                     batch.iloc[[index]] = temp_dp
 
             # Get predictions after perturbation
-            current_labels,_ = predict_LM(batch) if modelArch == "LM" else predict_GBT(batch)
+            current_labels,_ = predict_function(batch)
 
             # Revert datapoints that failed to flip prediction
             for index in range(len(batch)):
@@ -103,7 +103,7 @@ def generate_adversarial_dataset(
 
             # Backup batch before minimization
             batch_before_minimization = batch.copy()
-            labels_before_minimization,_ = predict_LM(batch_before_minimization) if modelArch == "LM" else predict_GBT(batch_before_minimization)
+            labels_before_minimization,_ = predict_function(batch_before_minimization)
 
             for datapoint_index in range(len(batch)):
                 if datapoint_saturated[datapoint_index]:
@@ -122,7 +122,7 @@ def generate_adversarial_dataset(
                     feature_saturation_map[datapoint_index].add(feature)
 
             # Get predictions after minimization
-            current_labels,_ = predict_LM(batch) if modelArch == "LM" else predict_GBT(batch)
+            current_labels,_ = predict_function(batch)
 
             for datapoint_index in range(len(batch)):
                 if datapoint_saturated[datapoint_index]:
@@ -154,7 +154,7 @@ def generate_adversarial_dataset(
         all_minimization_distances.append(minimization_distances)
 
         # Final predictions after perturbation + minimization
-        final_predictions, final_scores = predict_LM(batch) if modelArch == "LM" else predict_GBT(batch)
+        final_predictions, final_scores = predict_function(batch)
 
         # Annotate adversarial success per row
         batch['original_label'] = true_labels

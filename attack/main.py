@@ -35,6 +35,11 @@ all_features         = numerical_features + categorical_features
 label_col            = parameters_module.label_col
 positive_value       = parameters_module.positive_value
 
+
+model_module_path = f"{dataset_name}.prediction_functions.{model_name}"
+model_module = importlib.import_module(model_module_path)
+predict_function = model_module.predict
+
 # set paths for this permutation
 script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(script_dir)
@@ -50,12 +55,6 @@ csv_path = hf_hub_download(
 experiment_data = pd.read_csv(csv_path)
 df = experiment_data.copy()
 
-# # Create binary target label (1 for >50K, 0 otherwise)
-# df['income_binary'] = df['income'].apply(lambda x: 1 if '>50K' in x else 0)
-#
-# # Separate target and input features
-# target = df['income_binary']
-# features_main = df.drop(columns=['income', 'income_binary'])
 
 # Create binary target label using the parameters file
 df['target_binary'] = df[label_col].apply(lambda x: 1 if positive_value in str(x) else 0)
@@ -74,7 +73,7 @@ df_to_attack = df.sample(n=50, random_state=42).copy()
 # Run the adversarial attack and collect results
 adversarial_df, accuracies, distances, batch_sizes = generate_adversarial_dataset(
     df_to_attack,
-    model_name,
+    predict_function,
     correlation_dict,
     sigmas,
     numerical_features,
@@ -97,6 +96,7 @@ adversarial_df.to_csv(file_path)
 # display_attacks(original_df=df_to_attack, adversarial_df=adversarial_df, correlation_dict=correlation_dict, all_features=all_features, n=5)
 compare_attack_results(df_to_attack, adversarial_df)
 plot_roc_comparison(figures_path,
+                    model_name,
                     df_attacked=adversarial_df,
                     label_col='original_label',
                     original_score_col='score_before_attack',
